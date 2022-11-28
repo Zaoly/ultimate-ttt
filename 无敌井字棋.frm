@@ -3,10 +3,10 @@ Begin VB.Form Form1
    AutoRedraw      =   -1  'True
    BackColor       =   &H00E6FFFF&
    BorderStyle     =   1  'Fixed Single
-   Caption         =   "无敌井字棋"
+   Caption         =   "无敌井字棋 (当前水平: 无敌)"
    ClientHeight    =   5295
    ClientLeft      =   150
-   ClientTop       =   780
+   ClientTop       =   795
    ClientWidth     =   5295
    KeyPreview      =   -1  'True
    LinkTopic       =   "Form1"
@@ -270,6 +270,25 @@ Begin VB.Form Form1
    Begin VB.Menu MenuGame 
       Caption         =   "游戏(&G)"
       NegotiatePosition=   1  'Left
+      Begin VB.Menu MenuComputerLevel 
+         Caption         =   "电脑水平(&L)..."
+         Begin VB.Menu MenuEasy 
+            Caption         =   "初级(&E)"
+         End
+         Begin VB.Menu MenuNormal 
+            Caption         =   "中级(&N)"
+         End
+         Begin VB.Menu MenuHard 
+            Caption         =   "高级(&H)"
+         End
+         Begin VB.Menu MenuUltimate 
+            Caption         =   "无敌!(&U)"
+            Checked         =   -1  'True
+         End
+      End
+      Begin VB.Menu MenuDash1 
+         Caption         =   "-"
+      End
       Begin VB.Menu Undo 
          Caption         =   "悔棋？想多了吧..."
          Enabled         =   0   'False
@@ -278,7 +297,7 @@ Begin VB.Form Form1
          Caption         =   "重玩(&R)"
          Shortcut        =   ^R
       End
-      Begin VB.Menu MenuDash 
+      Begin VB.Menu MenuDash2 
          Caption         =   "-"
       End
       Begin VB.Menu MenuQuit 
@@ -319,10 +338,10 @@ Private Enum ResultType
     ResLose
 End Enum
 
-Private Const IDC_HAND As Long = 32649&
+Private Const IDC_HAND As Long = 32649& ' When mouse over square, mouse shape turns into a hand
 
 Dim TurnNo As Integer, Moves(8) As Integer, Pieces(8) As PieceType, Board(2, 2) As PieceType
-Dim IsMouseOver(8) As Boolean, IsMouseDisabled As Boolean
+Dim IsMouseOver(8) As Boolean, IsMouseDisabled As Boolean, WinLoseReversed As Boolean
 Dim hHandCursor As Long
 
 Private Function RandInt(Min As Long, Max As Long) As Long
@@ -330,7 +349,20 @@ Private Function RandInt(Min As Long, Max As Long) As Long
     RandInt = Int(Rnd * (Max - Min + 1)) + Min
 End Function
 
-Private Function BoardToNum() As Integer
+' Position number & array conversion:
+
+' Array: (R = row, C = column; array[R][C])
+
+'  R\C  0 1 2
+
+'   0   A B C
+'   1   D E F
+'   2   G H I
+
+' Number:
+'  A * 1 + B * 3 + C * 9 + ... + I * 6561
+
+Private Function BoardToNum() As Integer ' Transform position array to position number
     Dim Row As Integer, Column As Integer, Result As Integer
     For Row = 0 To 2
         For Column = 0 To 2
@@ -340,7 +372,7 @@ Private Function BoardToNum() As Integer
     BoardToNum = Result
 End Function
 
-Private Function MoveToBoard(Move As Integer) As Integer
+Private Function MoveToBoard(Move As Integer) As Integer ' Move on current board
     If (TurnNo And 1) = 0 Then
         MoveToBoard = BoardToNum + Piece1 * 3 ^ Move
     ElseIf (TurnNo And 1) = 1 Then
@@ -348,16 +380,7 @@ Private Function MoveToBoard(Move As Integer) As Integer
     End If
 End Function
 
-Private Function GetDoubleBit(Num As Byte, DoubleBitIndex As Integer) As Integer
-    Dim Index As Integer, Result As Integer
-    Result = Num
-    For Index = 0 To DoubleBitIndex - 1
-        Result = Result \ 4
-    Next
-    GetDoubleBit = Result And 3
-End Function
-
-Private Sub ChangeImageSquare(Index As Integer)
+Private Sub ChangeImageSquare(Index As Integer) ' Redraw square
     Dim FileName As String
     FileName = "square"
     Select Case Pieces(Index)
@@ -390,6 +413,12 @@ Private Function JudgePosition() As ResultType
         Board(0, 2) = Board(1, 2) And Board(1, 2) = Board(2, 2) And Board(2, 2) = Piece1 Or _
         Board(0, 0) = Board(1, 1) And Board(1, 1) = Board(2, 2) And Board(2, 2) = Piece1 Or _
         Board(0, 2) = Board(1, 1) And Board(1, 1) = Board(2, 0) And Board(2, 0) = Piece1
+    ' Including:
+    
+    '  111    000    000    100    010    001    100    001
+    '  000    111    000    100    010    001    010    010
+    '  000    000    111    100    010    001    001    100
+    
     Does2Win = _
         Board(0, 0) = Board(0, 1) And Board(0, 1) = Board(0, 2) And Board(0, 2) = Piece2 Or _
         Board(1, 0) = Board(1, 1) And Board(1, 1) = Board(1, 2) And Board(1, 2) = Piece2 Or _
@@ -399,25 +428,25 @@ Private Function JudgePosition() As ResultType
         Board(0, 2) = Board(1, 2) And Board(1, 2) = Board(2, 2) And Board(2, 2) = Piece2 Or _
         Board(0, 0) = Board(1, 1) And Board(1, 1) = Board(2, 2) And Board(2, 2) = Piece2 Or _
         Board(0, 2) = Board(1, 1) And Board(1, 1) = Board(2, 0) And Board(2, 0) = Piece2
-    If Does1Win And Not Does2Win Then
-        If TurnNo Mod 2 = 0 Then
+    If Does1Win And Not Does2Win Then     ' First player wins
+        If TurnNo Mod 2 = 0 Then     ' Second player's turn
             JudgePosition = ResLose
-        ElseIf TurnNo Mod 2 = 1 Then
+        ElseIf TurnNo Mod 2 = 1 Then ' First player's turn
             JudgePosition = ResWin
         End If
-    ElseIf Does2Win And Not Does1Win Then
-        If TurnNo Mod 2 = 0 Then
+    ElseIf Does2Win And Not Does1Win Then ' Second player wins
+        If TurnNo Mod 2 = 0 Then     ' Second player's turn
             JudgePosition = ResWin
-        ElseIf TurnNo Mod 2 = 1 Then
+        ElseIf TurnNo Mod 2 = 1 Then ' First player's turn
             JudgePosition = ResLose
         End If
     ElseIf Does1Win And Does2Win Or _
         Board(0, 0) <> NoPiece And Board(0, 1) <> NoPiece And Board(0, 2) <> NoPiece And _
         Board(1, 0) <> NoPiece And Board(1, 1) <> NoPiece And Board(1, 2) <> NoPiece And _
         Board(2, 0) <> NoPiece And Board(2, 1) <> NoPiece And Board(2, 2) <> NoPiece _
-    Then
+    Then ' Board is full
         JudgePosition = ResDraw
-    Else
+    Else ' Game not over yet
         JudgePosition = ResUnknown
     End If
 End Function
@@ -425,13 +454,13 @@ End Function
 Private Sub ClearBoard()
     Dim Index As Integer
     For Index = 0 To 8
-        If Pieces(Index) <> NoPiece Or IsMouseOver(Index) Then
+        If Pieces(Index) <> NoPiece Or IsMouseOver(Index) Then ' Clear board, where "Index" is of piece
             Pieces(Index) = NoPiece
             Board(Index \ 3, Index Mod 3) = NoPiece
             IsMouseOver(Index) = False
             ChangeImageSquare Index
         End If
-        Moves(Index) = 0
+        Moves(Index) = 0 ' Clear moves, where "Index" is of move
     Next
     TurnNo = 0
     If GameMode <> Self Then
@@ -440,43 +469,73 @@ Private Sub ClearBoard()
 End Sub
 
 Private Sub AutoMove()
-    Const MaskData As String = "TicTacToeMoveTable ThisIsDevelopedByZaoly PleaseDoNotModifyMe SoAsNotToInterfereWithAutoMover ThankYouForCooperation Love Zaoly "
-    Dim BoardNum As Integer, ByteValue As Byte, BestResult As ResultType, Result As ResultType, Move As Integer
+    Const MaskData = "TicTacToeMoveTable ThisIsDevelopedByZaoly PleaseDoNotModifyMe SoAsNotToInterfereWithAutoMover ThankYouForCooperation Love Zaoly "
+    Dim BoardNum As Integer, ByteValue As Byte, LargestResultValue As Integer, ResultValue As Integer, Move As Integer
     Dim BestMoves() As Integer, BestMoveCount As Integer, BestMoveIndex As Integer
-    If Len(Dir("tic-tac-toe.mvtbl")) = 0 Then
+    If _
+        Len(Dir("tic-tac-toe.mvtbl")) = 0 Or _
+        Len(Dir("tic-tac-toe-rev.mvtbl")) = 0 _
+    Then ' Check if file exists
         End
     End If
     If Not ( _
         GameMode = SoloFirst And TurnNo Mod 2 = 1 Or _
         GameMode = SoloSecond And TurnNo Mod 2 = 0 Or _
         GameMode = Self _
-    ) Then
+    ) Then ' Check game mode
         Exit Sub
     End If
     IsMouseDisabled = True
     DoEvents
-    Open "tic-tac-toe.mvtbl" For Binary As #1
-    BoardNum = BoardToNum
-    Get #1, BoardNum \ 4 + 1, ByteValue
-    ByteValue = ByteValue Xor CByte(Asc(Mid(MaskData, (BoardNum \ 4 And 127) + 1, 1)))
-    BestResult = GetDoubleBit(ByteValue, BoardNum And 3)
-    If BestResult = ResWin Then
-        BestResult = ResLose
-    ElseIf BestResult = ResLose Then
-        BestResult = ResWin
-    ElseIf BestResult = ResUnknown Then
+    If WinLoseReversed Then ' Surprise mode?
+        Open "tic-tac-toe-rev.mvtbl" For Binary As #1 ' Reverse it!
+    Else
+        Open "tic-tac-toe.mvtbl" For Binary As #1
+    End If
+    If LOF(1) <> 19683 Then ' Check file size
         End
+    End If
+    BoardNum = BoardToNum
+    Get #1, BoardNum + 1, ByteValue
+    ByteValue = ByteValue Xor CByte(Asc(Mid(MaskData, (BoardNum And 127) + 1, 1))) ' Decode
+    If ByteValue <= 127 Then
+        LargestResultValue = ByteValue
+    ElseIf ByteValue >= 128 Then
+        LargestResultValue = ByteValue - 256
+    End If
+    If LargestResultValue > 0 Then
+        LargestResultValue = -2 - LargestResultValue
+    ElseIf LargestResultValue < 0 Then
+        LargestResultValue = -LargestResultValue
+    End If
+    If _
+        MenuEasy.Checked Or _
+        MenuNormal.Checked And LargestResultValue > -127 And LargestResultValue < 127 Or _
+        MenuHard.Checked And LargestResultValue > -125 And LargestResultValue < 125 _
+    Then ' Easy mode: idiot
+         ' Normal mode: only 1~2 steps considered
+         ' Hard mode: only 2~3 steps considered
+         ' Ultimate mode: eh hey hey hey~ (BEAT ME? NO WAY!)
+        LargestResultValue = 0
     End If
     For Move = 0 To 8
         If Pieces(Move) = NoPiece Then
             BoardNum = MoveToBoard(Move)
-            Get #1, BoardNum \ 4 + 1, ByteValue
-            ByteValue = ByteValue Xor Asc(Mid(MaskData, (BoardNum \ 4 And 127) + 1, 1))
-            Result = GetDoubleBit(ByteValue, BoardNum And 3)
-            If Result = ResUnknown Then
-                End
+            Get #1, BoardNum + 1, ByteValue
+            ByteValue = ByteValue Xor CByte(Asc(Mid(MaskData, (BoardNum And 127) + 1, 1))) ' Decode
+            If ByteValue <= 127 Then
+                ResultValue = ByteValue
+            ElseIf ByteValue >= 128 Then
+                ResultValue = ByteValue - 256
             End If
-            If Result = BestResult Then
+            If _
+                MenuEasy.Checked Or _
+                MenuNormal.Checked And ResultValue > -127 And LargestResultValue < 127 Or _
+                MenuHard.Checked And ResultValue > -125 And LargestResultValue < 125 _
+            Then
+                ResultValue = 0
+            End If
+            If ResultValue = LargestResultValue Then
                 ReDim Preserve BestMoves(BestMoveCount)
                 BestMoves(BestMoveCount) = Move
                 BestMoveCount = BestMoveCount + 1
@@ -489,7 +548,7 @@ Private Sub AutoMove()
     ImageSquare_MouseDown BestMoves(BestMoveIndex), vbLeftButton, 0, ImageSquare(BestMoves(BestMoveIndex)).Left, ImageSquare(BestMoves(BestMoveIndex)).Top
 End Sub
 
-Private Sub ShowPieces(MyPiece As PieceType, Square1 As Integer, Square2 As Integer, Square3 As Integer)
+Private Sub HighlightPieces(MyPiece As PieceType, Square1 As Integer, Square2 As Integer, Square3 As Integer)
     If MyPiece = Piece1 Then
         ImageSquare(Square1).Picture = LoadPicture("squareX!.bmp")
         ImageSquare(Square2).Picture = LoadPicture("squareX!.bmp")
@@ -504,38 +563,55 @@ End Sub
 Private Sub ShowWin()
     Select Case True
     Case Board(0, 0) = Board(0, 1) And Board(0, 1) = Board(0, 2) And Board(0, 2) = Piece1
-        ShowPieces Piece1, 0, 1, 2
+        HighlightPieces Piece1, 0, 1, 2
     Case Board(1, 0) = Board(1, 1) And Board(1, 1) = Board(1, 2) And Board(1, 2) = Piece1
-        ShowPieces Piece1, 3, 4, 5
+        HighlightPieces Piece1, 3, 4, 5
     Case Board(2, 0) = Board(2, 1) And Board(2, 1) = Board(2, 2) And Board(2, 2) = Piece1
-        ShowPieces Piece1, 6, 7, 8
+        HighlightPieces Piece1, 6, 7, 8
     Case Board(0, 0) = Board(1, 0) And Board(1, 0) = Board(2, 0) And Board(2, 0) = Piece1
-        ShowPieces Piece1, 0, 3, 6
+        HighlightPieces Piece1, 0, 3, 6
     Case Board(0, 1) = Board(1, 1) And Board(1, 1) = Board(2, 1) And Board(2, 1) = Piece1
-        ShowPieces Piece1, 1, 4, 7
+        HighlightPieces Piece1, 1, 4, 7
     Case Board(0, 2) = Board(1, 2) And Board(1, 2) = Board(2, 2) And Board(2, 2) = Piece1
-        ShowPieces Piece1, 2, 5, 8
+        HighlightPieces Piece1, 2, 5, 8
     Case Board(0, 0) = Board(1, 1) And Board(1, 1) = Board(2, 2) And Board(2, 2) = Piece1
-        ShowPieces Piece1, 0, 4, 8
+        HighlightPieces Piece1, 0, 4, 8
     Case Board(0, 2) = Board(1, 1) And Board(1, 1) = Board(2, 0) And Board(2, 0) = Piece1
-        ShowPieces Piece1, 2, 4, 6
+        HighlightPieces Piece1, 2, 4, 6
     Case Board(0, 0) = Board(0, 1) And Board(0, 1) = Board(0, 2) And Board(0, 2) = Piece2
-        ShowPieces Piece2, 0, 1, 2
+        HighlightPieces Piece2, 0, 1, 2
     Case Board(1, 0) = Board(1, 1) And Board(1, 1) = Board(1, 2) And Board(1, 2) = Piece2
-        ShowPieces Piece2, 3, 4, 5
+        HighlightPieces Piece2, 3, 4, 5
     Case Board(2, 0) = Board(2, 1) And Board(2, 1) = Board(2, 2) And Board(2, 2) = Piece2
-        ShowPieces Piece2, 6, 7, 8
+        HighlightPieces Piece2, 6, 7, 8
     Case Board(0, 0) = Board(1, 0) And Board(1, 0) = Board(2, 0) And Board(2, 0) = Piece2
-        ShowPieces Piece2, 0, 3, 6
+        HighlightPieces Piece2, 0, 3, 6
     Case Board(0, 1) = Board(1, 1) And Board(1, 1) = Board(2, 1) And Board(2, 1) = Piece2
-        ShowPieces Piece2, 1, 4, 7
+        HighlightPieces Piece2, 1, 4, 7
     Case Board(0, 2) = Board(1, 2) And Board(1, 2) = Board(2, 2) And Board(2, 2) = Piece2
-        ShowPieces Piece2, 2, 5, 8
+        HighlightPieces Piece2, 2, 5, 8
     Case Board(0, 0) = Board(1, 1) And Board(1, 1) = Board(2, 2) And Board(2, 2) = Piece2
-        ShowPieces Piece2, 0, 4, 8
+        HighlightPieces Piece2, 0, 4, 8
     Case Board(0, 2) = Board(1, 1) And Board(1, 1) = Board(2, 0) And Board(2, 0) = Piece2
-        ShowPieces Piece2, 2, 4, 6
+        HighlightPieces Piece2, 2, 4, 6
     End Select
+End Sub
+
+Private Sub InitBoard()
+    Select Case True
+    Case MenuEasy.Checked
+        Form1.Caption = "无敌井字棋 (当前水平: 初级)"
+    Case MenuNormal.Checked
+        Form1.Caption = "无敌井字棋 (当前水平: 中级)"
+    Case MenuHard.Checked
+        Form1.Caption = "无敌井字棋 (当前水平: 高级)"
+    Case MenuUltimate.Checked
+        Form1.Caption = "无敌井字棋 (当前水平: 无敌)"
+    End Select
+    ClearBoard
+    If GameMode = Self Then
+        MsgBox "你可以决定第一步棋。", vbInformation
+    End If
 End Sub
 
 Private Sub Form_KeyPress(KeyAscii As Integer)
@@ -545,13 +621,10 @@ Private Sub Form_KeyPress(KeyAscii As Integer)
 End Sub
 
 Private Sub Form_Load()
-    hHandCursor = LoadCursor(0&, IDC_HAND)
+    hHandCursor = LoadCursor(0&, IDC_HAND) ' Load hand mouse icon
     Form1.Show
     Form2.Show vbModal
-    ClearBoard
-    If GameMode = Self Then
-        MsgBox "你可以决定第一步棋。", vbInformation
-    End If
+    InitBoard
 End Sub
 
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)
@@ -565,7 +638,7 @@ Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y A
 End Sub
 
 Private Sub ImageSquare_MouseDown(Index As Integer, Button As Integer, Shift As Integer, x As Single, y As Single)
-    Dim GameResult As ResultType
+    Dim GameResult As ResultType, PromptContent As String
     If Button <> vbLeftButton Or IsMouseDisabled Or Pieces(Index) <> NoPiece Then
         Exit Sub
     End If
@@ -583,24 +656,42 @@ Private Sub ImageSquare_MouseDown(Index As Integer, Button As Integer, Shift As 
     GameResult = JudgePosition
     If GameResult = ResWin Then
         ShowWin
-        If TurnNo Mod 2 = 0 Then
+        If TurnNo Mod 2 = 0 Xor WinLoseReversed Then
             Form1.BackColor = RGB(0, 96, 162)
-            If MsgBox("游戏结束，恭喜 ○ 方（后手）胜！" & vbCrLf & _
+            If GameMode = SoloFirst Then
+                PromptContent = "很抱歉，你输了！"
+            ElseIf GameMode = SoloSecond Then
+                PromptContent = "恭喜你，你赢了！"
+            Else
+                PromptContent = "游戏结束，恭喜 ○ 方（后手）胜！"
+            End If
+            If MsgBox(PromptContent & vbCrLf & _
                       vbCrLf & _
                       "再来一局吗？", _
             vbInformation + vbYesNo) = vbNo Then
                 End
             End If
-        ElseIf TurnNo Mod 2 = 1 Then
+        ElseIf TurnNo Mod 2 = 1 Xor WinLoseReversed Then
             Form1.BackColor = RGB(191, 95, 29)
-            If MsgBox("游戏结束，恭喜 × 方（先手）胜！" & vbCrLf & _
+            If GameMode = SoloFirst Then
+                PromptContent = "恭喜你，你赢了！"
+            ElseIf GameMode = SoloSecond Then
+                PromptContent = "很抱歉，你输了！"
+            Else
+                PromptContent = "游戏结束，恭喜 × 方（先手）胜！"
+            End If
+            If MsgBox(PromptContent & vbCrLf & _
                       vbCrLf & _
                       "再来一局吗？", _
             vbInformation + vbYesNo) = vbNo Then
                 End
             End If
         End If
-        Form1.BackColor = RGB(255, 255, 230)
+        If WinLoseReversed Then
+            Form1.BackColor = RGB(255, 230, 255)
+        Else
+            Form1.BackColor = RGB(255, 255, 230)
+        End If
         SwitchOrder
         ClearBoard
     ElseIf GameResult = ResDraw Then
@@ -633,11 +724,39 @@ Private Sub ImageSquare_MouseMove(Index As Integer, Button As Integer, Shift As 
 End Sub
 
 Private Sub MenuAbout_Click()
+    Static ClickTimes As Long
     MsgBox "无敌井字棋" & vbCrLf & _
            vbCrLf & _
            "开发者: 赵迪 (Zaoly)" & vbCrLf & _
            "QQ: 2298511336", _
     vbInformation
+    ClickTimes = ClickTimes + 1
+    If ClickTimes = 3 Then
+        MsgBox "恭喜你，你发现了本游戏的“彩蛋”——胜负反转模式。" & vbCrLf & _
+               "此模式下，有三子连成一排的一方反而为输。" & vbCrLf & _
+               vbCrLf & _
+               "祝您游戏愉快！（若要退出“胜负反转”模式，请重启游戏。）", _
+        vbInformation
+        WinLoseReversed = True
+        Form1.BackColor = RGB(255, 230, 255)
+        InitBoard
+    End If
+End Sub
+
+Private Sub MenuEasy_Click()
+    MenuEasy.Checked = True
+    MenuNormal.Checked = False
+    MenuHard.Checked = False
+    MenuUltimate.Checked = False
+    InitBoard
+End Sub
+
+Private Sub MenuHard_Click()
+    MenuEasy.Checked = False
+    MenuNormal.Checked = False
+    MenuHard.Checked = True
+    MenuUltimate.Checked = False
+    InitBoard
 End Sub
 
 Private Sub MenuHowToPlay_Click()
@@ -646,6 +765,14 @@ Private Sub MenuHowToPlay_Click()
            vbCrLf & _
            "注：按数字键盘也可下棋哦！", _
     vbInformation
+End Sub
+
+Private Sub MenuNormal_Click()
+    MenuEasy.Checked = False
+    MenuNormal.Checked = True
+    MenuHard.Checked = False
+    MenuUltimate.Checked = False
+    InitBoard
 End Sub
 
 Private Sub MenuQuit_Click()
@@ -657,9 +784,14 @@ Private Sub MenuReplay_Click()
     If IsCancelled Then
         IsCancelled = False
     Else
-        ClearBoard
-        If GameMode = Self Then
-            MsgBox "你可以决定第一步棋。", vbInformation
-        End If
+        InitBoard
     End If
+End Sub
+
+Private Sub MenuUltimate_Click()
+    MenuEasy.Checked = False
+    MenuNormal.Checked = False
+    MenuHard.Checked = False
+    MenuUltimate.Checked = True
+    InitBoard
 End Sub
